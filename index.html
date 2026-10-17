@@ -177,8 +177,20 @@
   <div class="bar"><h1>英文リーダー</h1></div>
   <div class="body">
     <div class="panel">
-      <h2>はじめに</h2>
-      <p>手書きメモ・単語帳と同じ「合言葉」で使います。手書きメモの「設定」→「ペアリングコードを表示」で出た8文字を入力してください。</p>
+      <h2>はじめて使う</h2>
+      <p>英文リーダーと My単語帳 だけで使う「合言葉」を新しく作ります（手書きメモ・キクタンとは別の合言葉です）。</p>
+      <button class="primary" id="btn-new-key" type="button">新しい合言葉を作る</button>
+      <div id="new-key-box" class="hidden">
+        <p>合言葉：<b id="new-key"></b></p>
+        <p class="note">この合言葉を使えるように、Firebase のルールに次の1行を追加してください（Firebase のサイト →「Realtime Database」→「ルール」の <b>"memos": {</b> のすぐ下に貼り付けて「公開」）。</p>
+        <textarea id="rule-line" readonly style="width:100%;height:60px;box-sizing:border-box;font:13px Menlo,monospace;border:1px solid #c9d2d8;border-radius:8px;padding:8px"></textarea>
+        <div class="row"><button id="btn-copy-rule" type="button">コピー</button> <button class="primary" id="btn-check-key" type="button">追加したので確認する</button></div>
+        <div class="msg" id="new-key-msg"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>ほかの端末ですでに使っている</h2>
+      <p>使っている端末の英文リーダーで「⚙ 設定」→「ペアリングコードを表示」を押し、出た8文字を入力してください。</p>
       <input type="text" class="code-in" id="inp-code-setup" maxlength="9" autocapitalize="characters" autocorrect="off" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX">
       <div class="msg" id="setup-msg"></div>
       <button class="primary" id="btn-code-setup" type="button">コードで設定する</button>
@@ -259,9 +271,13 @@
       <button id="gas-close" type="button">閉じる</button>
     </div>
     <p id="gas-msg" class="note"></p>
-    <h3 style="margin-top:18px">合言葉（ほかのアプリと共通）</h3>
+    <h3 style="margin-top:18px">合言葉（英文リーダーと My単語帳 専用）</h3>
     <p class="note" id="key-show"></p>
-    <p class="note">変えるときは、手書きメモの「設定」→「ペアリングコードを表示」で出た8文字を入れてください。</p>
+    <p class="note">ほかの端末（iPad 2/3 など）で使うときは、ペアリングコードを表示して、その端末の英文リーダーか My単語帳 に入力してください。</p>
+    <div class="row"><button id="btn-pair" type="button">ペアリングコードを表示</button></div>
+    <div class="codebox hidden" id="pair-box"><b id="pair-code"></b> <span id="pair-left" class="note"></span></div>
+    <div class="msg" id="pair-msg"></div>
+    <p class="note" style="margin-top:12px">合言葉を変えるときは、ほかの端末で表示したペアリングコードを入れてください。</p>
     <input type="text" class="code-in" id="inp-code-settings" maxlength="9" autocapitalize="characters" autocorrect="off" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX">
     <div class="row"><button id="btn-code-settings" type="button">コードで合言葉を変える</button></div>
     <div class="msg" id="settings-msg"></div>
@@ -333,7 +349,7 @@
   }
 
 
-  var KEY = lsGet('memo_key');   // 手書きメモ・単語帳と共通の合言葉
+  var KEY = lsGet('eibun_key');   // 英文リーダーと My単語帳 だけの合言葉（手書きメモ・キクタンとは別）
   /* ===================== 通信（Firebase REST） ===================== */
   function api(method, path, body, cb) { rawApi(method, '/memos/' + KEY + path, body, cb); }
   function rawApi(method, path, body, cb) {
@@ -386,12 +402,12 @@
   // 保存先：memos/合言葉/reader/ID = {title, text, tr: [文ごとの訳], at}
   //        memos/合言葉/settings/gas = 翻訳（Google Apps Script）のアドレス
   //        memos/合言葉/myvocab = My単語帳（キクタンと同じ形：words = 「単語\t意味\t番号」の行）
-  var rdDocs = lsJSON('memo_reader', {});
+  var rdDocs = lsJSON('eibun_reader', {});
   var rdCur = null;                 // 開いている英文 {id, title, text, tr}
   var rdSents = [];                 // [{text, toks:[{w, s, e}], idioms:[...]}]
-  var gasUrl = lsGet('memo_gas') || '';
-  var rdRate = Number(lsGet('memo_rd_rate') || 0.9);
-  var rdShowTr = lsGet('memo_rd_tr') !== '0';
+  var gasUrl = lsGet('eibun_gas') || '';
+  var rdRate = Number(lsGet('eibun_rd_rate') || 0.9);
+  var rdShowTr = lsGet('eibun_rd_tr') !== '0';
   var dict = {};                    // 頭文字 -> {単語: 意味}
   var dictWait = {};
   var phrases = null, phraseIdx = null, phraseWait = null;
@@ -645,7 +661,7 @@
   }
 
   /* ---- 翻訳（Google Apps Script・JSONP） ---- */
-  var jsonpN = 0, gasXhrOk = lsGet('memo_gas_xhr') !== '0';
+  var jsonpN = 0, gasXhrOk = lsGet('eibun_gas_xhr') !== '0';
   // まずは普通の通信（ログイン情報を送らないので、Google に複数ログインしていても動く）。だめなら JSONP
   function gasCall(params, cb) {
     if (!gasUrl) { cb(null, 'nourl'); return; }
@@ -654,7 +670,7 @@
     var x = new XMLHttpRequest(), done = false;
     try { x.open('GET', gasUrl + (gasUrl.indexOf('?') >= 0 ? '&' : '?') + q.join('&'), true); } catch (e) { gasJsonp(params, cb); return; }
     x.timeout = 30000;
-    var fail = function () { if (done) return; done = true; gasJsonp(params, function (data, err) { if (data && !err) { gasXhrOk = false; lsSet('memo_gas_xhr', '0'); } cb(data, err); }); };
+    var fail = function () { if (done) return; done = true; gasJsonp(params, function (data, err) { if (data && !err) { gasXhrOk = false; lsSet('eibun_gas_xhr', '0'); } cb(data, err); }); };
     x.onreadystatechange = function () {
       if (x.readyState !== 4 || done) return;
       var data = null;
@@ -701,7 +717,7 @@
   }
 
   /* ---- 画面 ---- */
-  function rdSaveLocal() { lsSet('memo_reader', JSON.stringify(rdDocs)); }
+  function rdSaveLocal() { lsSet('eibun_reader', JSON.stringify(rdDocs)); }
   function rdIds() { var a = []; for (var k in rdDocs) if (rdDocs[k] && rdDocs[k].text) a.push(k); a.sort(function (x, y) { return (rdDocs[y].at || 0) - (rdDocs[x].at || 0); }); return a; }
   function renderRdHistory() {
     var box = $('rd-hist'); box.innerHTML = '';
@@ -732,7 +748,7 @@
       if (!rdCur) renderRdHistory();
     });
     api('GET', '/settings/gas', undefined, function (err, u) {
-      if (!err && typeof u === 'string' && u !== gasUrl) { gasUrl = u; lsSet('memo_gas', u); }
+      if (!err && typeof u === 'string' && u !== gasUrl) { gasUrl = u; lsSet('eibun_gas', u); }
     });
   }
   function openReader(text) {
@@ -956,8 +972,8 @@
   on($('rd-my'), 'click', function () { window.open(/OS [5-9]_\d.* like Mac OS X/.test(navigator.userAgent) ? '/kiku-my/ipad.html' : '/kiku-my/', '_blank'); });
   on($('rd-new'), 'click', function () { $('rd-in').value = ''; rdShowInput(); });
   on($('rd-play'), 'click', function () { if (rdSpeaking) stopSpeak(); else playFrom(rdIdx >= 0 ? rdIdx : 0); });
-  on($('rd-rate'), 'change', function () { rdRate = Number($('rd-rate').value) || 0.9; lsSet('memo_rd_rate', String(rdRate)); });
-  on($('rd-trbtn'), 'click', function () { rdShowTr = !rdShowTr; lsSet('memo_rd_tr', rdShowTr ? '1' : '0'); renderRd(); });
+  on($('rd-rate'), 'change', function () { rdRate = Number($('rd-rate').value) || 0.9; lsSet('eibun_rd_rate', String(rdRate)); });
+  on($('rd-trbtn'), 'click', function () { rdShowTr = !rdShowTr; lsSet('eibun_rd_tr', rdShowTr ? '1' : '0'); renderRd(); });
   on($('rd-retr'), 'click', function () { if (!rdCur) return; delete rdCur.d.tr; openRdDoc(rdCur.id); });
 
   // 翻訳の設定
@@ -993,10 +1009,10 @@
     if (!/^https:\/\/script\.google\.com\/macros\/s\/[^\/]+\/exec/.test(u)) { $('gas-msg').textContent = '「https://script.google.com/macros/s/…/exec」の形のアドレスを入れてください。'; return; }
     $('gas-msg').textContent = 'テスト中…';
     var save = gasUrl; gasUrl = u;
-    gasXhrOk = true; lsDel('memo_gas_xhr');
+    gasXhrOk = true; lsDel('eibun_gas_xhr');
     translateOne('I am looking forward to seeing you.', function (t) {
       if (!t) { gasUrl = save; $('gas-msg').textContent = 'うまくいきませんでした。公開の設定（アクセスできるユーザー：全員）とアドレスを確認してください。'; return; }
-      lsSet('memo_gas', u);
+      lsSet('eibun_gas', u);
       var b = {}; b['settings/gas'] = u; api('PATCH', '', b, function () {});
       $('gas-msg').textContent = 'うまくいきました：「' + t + '」。ほかの端末にもこの設定が届きます。';
     });
@@ -1037,12 +1053,92 @@
   }
 
   function useKey(k) {
-    KEY = k; lsSet('memo_key', k);
+    KEY = k; lsSet('eibun_key', k);
     rdDocs = {}; rdSaveLocal();
     $('settings-msg').textContent = ''; $('gas-dlg').className = 'hidden';
     openReader(wantText());
   }
   on($('btn-code-setup'), 'click', function () { redeemCode('setup'); });
+
+  /* ---- 新しい合言葉を作る ---- */
+  function makeKey() {
+    var out = '', bytes = [];
+    if (window.crypto && window.crypto.getRandomValues) { var a = new Uint8Array(32); window.crypto.getRandomValues(a); for (var i = 0; i < 32; i++) bytes.push(a[i]); }
+    else for (var j = 0; j < 32; j++) bytes.push(Math.floor(Math.random() * 256));
+    for (var k = 0; k < 32; k++) { if (k && k % 4 === 0) out += '-'; out += KEY_CHARS.charAt(bytes[k] % KEY_CHARS.length); }
+    return out;
+  }
+  var newKey = lsGet('eibun_new_key') || null;
+  function showNewKey() {
+    $('new-key').textContent = newKey;
+    $('rule-line').value = '"' + newKey + '": { ".read": true, ".write": true },';
+    $('new-key-box').className = '';
+  }
+  if (newKey) showNewKey();
+  on($('btn-new-key'), 'click', function () {
+    if (!newKey) { newKey = makeKey(); lsSet('eibun_new_key', newKey); }
+    showNewKey();
+  });
+  on($('btn-copy-rule'), 'click', function () { copyText($('rule-line').value); try { $('rule-line').select(); } catch (e) {} });
+  on($('btn-check-key'), 'click', function () {
+    var msg = $('new-key-msg'); msg.textContent = '確認中…';
+    rawApi('PUT', '/memos/' + newKey + '/settings/created', now(), function (err) {
+      if (err) { msg.textContent = (err.status === 401 || err.status === 403) ? 'まだ使えません。ルールに1行を追加して「公開」したか確認してください。' : '接続できません（' + errText(err) + '）'; return; }
+      var k = newKey; newKey = null; lsDel('eibun_new_key');
+      var old = lsGet('memo_key');
+      KEY = k; lsSet('eibun_key', k);
+      if (old && window.confirm('手書きメモの合言葉に保存されている「これまでの英文」「My単語帳の単語」「翻訳の設定」を、この新しい合言葉に移しますか？\n（移したあとは、手書きメモ側からは消えます。翻訳の設定は両方に残ります）')) moveFromMemo(old, function () { openReader(''); });
+      else openReader('');
+    });
+  });
+  // 手書きメモの合言葉から引っ越す
+  function moveFromMemo(old, done) {
+    busyMsg('引っ越し中…');
+    var got = {}, left = 3;
+    var get = function (path, name) {
+      rawApi('GET', '/memos/' + old + path, undefined, function (err, data) { if (!err && data) got[name] = data; if (--left === 0) put(); });
+    };
+    var put = function () {
+      var b = {};
+      if (got.reader) b.reader = got.reader;
+      if (got.myvocab) b.myvocab = got.myvocab;
+      if (got.gas) b['settings/gas'] = got.gas;
+      if (!b.reader && !b.myvocab && !b['settings/gas']) { busyMsg(''); done(); return; }
+      api('PATCH', '', b, function (err) {
+        if (err) { busyMsg('移せませんでした（' + errText(err) + '）'); done(); return; }
+        if (got.gas) { gasUrl = got.gas; lsSet('eibun_gas', got.gas); }
+        // 手書きメモ側からは消す（翻訳の設定は残す）
+        var d = {}; if (got.reader) d.reader = null; if (got.myvocab) d.myvocab = null;
+        rawApi('PATCH', '/memos/' + old, d, function () {});
+        lsDel('memo_reader');
+        busyMsg('引っ越しが終わりました。');
+        done();
+      });
+    };
+    get('/reader', 'reader'); get('/myvocab', 'myvocab'); get('/settings/gas', 'gas');
+  }
+  function busyMsg(t) { var m = $('rd-msg'); if (m) m.textContent = t; }
+
+  /* ---- ペアリングコードを表示（5分・1回だけ） ---- */
+  var pair = null;
+  function makeCode() { var o = ''; for (var i = 0; i < 8; i++) o += KEY_CHARS.charAt(Math.floor(Math.random() * KEY_CHARS.length)); return o; }
+  function stopPair() { if (!pair) return; clearInterval(pair.timer); rawApi('DELETE', '/pair/' + pair.code, undefined, function () {}); pair = null; $('pair-box').className = 'codebox hidden'; $('btn-pair').textContent = 'ペアリングコードを表示'; }
+  on($('btn-pair'), 'click', function () {
+    if (pair) { stopPair(); return; }
+    var code = makeCode(), exp = now() + 300000;
+    $('pair-msg').textContent = '準備中…';
+    rawApi('PUT', '/pair/' + code, { k: KEY, exp: exp }, function (err) {
+      if (err) { $('pair-msg').textContent = 'コードを作れませんでした（' + errText(err) + '）'; return; }
+      $('pair-msg').textContent = '';
+      $('pair-code').textContent = (code.slice(0, 4) + '-' + code.slice(4)).toUpperCase();
+      $('pair-box').className = 'codebox'; $('btn-pair').textContent = 'コードを取り消す';
+      pair = { code: code, exp: exp, timer: setInterval(function () {
+        var l = Math.max(0, Math.ceil((exp - now()) / 1000));
+        if (!l) { stopPair(); return; }
+        $('pair-left').textContent = 'あと ' + Math.floor(l / 60) + ':' + pad2(l % 60);
+      }, 1000) };
+    });
+  });
   on($('btn-code-settings'), 'click', function () { redeemCode('settings'); });
   on($('btn-use-key'), 'click', function () {
     var k = normKey($('inp-key').value);
@@ -1060,7 +1156,7 @@
 
   /* ===================== 起動 ===================== */
   var hashKey = keyFromHash(), docId = wantDoc();
-  if (hashKey) { KEY = hashKey; lsSet('memo_key', hashKey); }
+  if (hashKey) { KEY = hashKey; lsSet('eibun_key', hashKey); }
   if (!KEY) show('scr-setup');
   else {
     openReader('');
