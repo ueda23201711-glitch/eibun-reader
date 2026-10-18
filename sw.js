@@ -1,6 +1,6 @@
 // 英文リーダー用 Service Worker（iOS 9 では使われない。新しい端末でのオフライン起動用）
-const CACHE = "eibun-reader-v3";
-const ASSETS = ["./", "./index.html", "./app.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon-180.png", "./icons/favicon-32.png", "./vendor/ejdict/phrases.json"];
+const CACHE = "eibun-reader-v4";
+const ASSETS = ["./", "./index.html", "./lock.js", "./app.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon-180.png", "./icons/favicon-32.png", "./vendor/ejdict/phrases.json"];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

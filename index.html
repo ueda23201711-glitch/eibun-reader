@@ -281,6 +281,9 @@
     <input type="text" class="code-in" id="inp-code-settings" maxlength="9" autocapitalize="characters" autocorrect="off" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX">
     <div class="row"><button id="btn-code-settings" type="button">コードで合言葉を変える</button></div>
     <div class="msg" id="settings-msg"></div>
+    <h3 style="margin-top:18px">暗証番号（この端末だけ）</h3>
+    <p class="note">設定すると、開いたときと、10分以上ほかのアプリなどに離れて戻ったときに暗証番号を聞きます。My単語帳 と共通です（同じブラウザーの場合）。</p>
+    <div class="row" id="pl-slot"></div>
   </div>
 </div>
 
@@ -1208,5 +1211,6 @@
   window.__rd = { state: function () { return { key: KEY, docs: rdDocs, cur: rdCur, gas: gasUrl }; } };
 })();
 </script>
+<script src="lock.js"></script>
 </body>
 </html>
