@@ -263,8 +263,8 @@
     <div id="rd-view" class="hidden">
       <div id="rd-ctrl">
         <div id="yt-wrap" class="hidden"><div id="yt-box"><div id="yt-player"></div></div>
-          <div id="yt-safari" class="hidden" style="color:#fff;padding:14px 12px;font-size:14px;line-height:1.6">ホーム画面から開いた英文リーダーでは、この iPad で YouTube を再生できません。<br>
-            <button id="yt-safari-btn" class="primary" type="button" style="margin-top:8px">Safari でこの動画を開く</button></div></div>
+          <div id="yt-safari" class="hidden" style="color:#fff;padding:14px 12px;font-size:14px;line-height:1.6">この iPad では、動画をこの画面の中で再生できません。<br>セリフの「▶ 時刻」を押すと、YouTube のその場面が別の画面で開きます。見終わったら、この画面に戻って単語を調べてください。<br>
+            <button id="yt-safari-btn" class="primary" type="button" style="margin-top:8px">▶ YouTube で最初から見る</button></div></div>
         <button id="rd-play" class="primary" type="button">▶ 再生</button>
         <button id="yt-loop" class="hidden" type="button" title="今のセリフをくり返し再生">🔂 1文くり返し：オフ</button>
         <button id="rd-cont" type="button" title="🔊 で読んだあと、次の文も続けて読む">🔁 続けて：オフ</button>
@@ -1121,7 +1121,9 @@
     hp.innerHTML = v ? 'セリフの ▶ でその場面から再生。単語をタップすると動画が止まって意味が出ます（<span class="idm-sample">下線</span>は熟語）。「🔂 1文くり返し」で今のセリフをくり返します。' : hp.getAttribute('data-n');
   }
   // iPad 2/3 のホーム画面アプリでは YouTube が再生できないので、Safari で開く
-  function ytNeedSafari() { return window.navigator.standalone === true && /OS [5-9]_\d.* like Mac OS X/.test(navigator.userAgent); }
+  // iPad 2/3（iOS 9 まで）は YouTube の埋め込み再生ができないので、YouTube のページをその場面から開く
+  function ytNeedSafari() { return /OS [5-9]_\d.* like Mac OS X/.test(navigator.userAgent); }
+  function ytOpenOut(sec) { if (!rdCur) return; window.open('https://www.youtube.com/watch?v=' + rdCur.d.yt + '&t=' + Math.floor(sec || 0) + 's', '_blank'); }
   function ytOpen(d) {
     $('yt-wrap').className = ''; ytShowCtl(true);
     if (ytNeedSafari()) {
@@ -1162,6 +1164,7 @@
   }
   function ytSeek(si) {
     if (!ytOn()) return;
+    if (ytNeedSafari()) { markSentence(si); ytOpenOut(rdCur.d.cues[si][0]); return; }
     if (ytLoop) ytLoopIdx = si;
     markSentence(si);
     if (!ytPlayer || !ytReady) return;
@@ -1654,11 +1657,7 @@
   on($('rd-new'), 'click', function () { $('rd-in').value = ''; rdShowInput(); });
   on($('rd-play'), 'click', function () { if (ytOn()) { ytToggle(); return; } if (rdSpeaking) stopSpeak(); else playFrom(rdIdx >= 0 ? rdIdx : 0); });
   on($('yt-go'), 'click', ytLoad);
-  on($('yt-safari-btn'), 'click', function () {
-    if (!rdCur) return;
-    rdStore(rdCur.id);
-    window.open(location.protocol + '//' + location.host + location.pathname + '#k=' + KEY + '&doc=' + rdCur.id, '_blank');
-  });
+  on($('yt-safari-btn'), 'click', function () { ytOpenOut(0); });
   on($('yt-loop'), 'click', function () { ytLoop = !ytLoop; ytLoopIdx = ytLoop ? rdIdx : -1; ytLoopLabel(); });
   on(window, 'resize', function () { if (ytOn()) ytSize(); });
   on($('rd-flowbtn'), 'click', openFlow);
