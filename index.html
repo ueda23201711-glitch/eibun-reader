@@ -251,9 +251,10 @@
       <div class="yt-in">
         <h3 class="rd-h" style="margin-top:0">🎬 YouTube の動画で読む</h3>
         <input id="yt-url" type="url" placeholder="YouTube のアドレス（https://www.youtube.com/watch?v=…）" autocapitalize="off" autocorrect="off">
-        <textarea id="yt-in" placeholder="字幕（文字起こし）を時刻つきで貼り付け"></textarea>
+        <textarea id="yt-in" placeholder="（空のままで大丈夫：字幕を自動で取ってきます。うまくいかないときだけ、文字起こしを時刻つきで貼り付け）"></textarea>
         <div class="row"><button id="yt-go" class="primary" type="button">動画といっしょに読み込む</button></div>
-        <p class="note">字幕の取り方（パソコンが簡単です）：YouTube で動画を開き、説明欄の「…もっと見る」→ いちばん下の「文字起こしを表示」→ 右に出た文字起こしをドラッグで最後まで選んでコピーして、上に貼り付けます（時刻も一緒に）。字幕ファイル（.srt / .vtt）の中身でも大丈夫です。</p>
+        <p class="note" id="yt-msg"></p>
+        <p class="note">字幕は、アドレスだけ入れて押せば自動で取ってきます（英語の字幕がある動画）。取れないときの貼り付け方（パソコンが簡単です）：YouTube で動画を開き、説明欄の「…もっと見る」→ いちばん下の「文字起こしを表示」→ 右に出た文字起こしをドラッグで最後まで選んでコピーして、上に貼り付けます（時刻も一緒に）。字幕ファイル（.srt / .vtt）の中身でも大丈夫です。</p>
       </div>
       <p class="note">保存した単語・熟語は <a href="/kiku-my/" target="_blank">📚 My単語帳</a> で学習できます（iPad 2/3 は <a href="/kiku-my/ipad.html" target="_blank">こちら</a>）。</p>
       <p class="note" id="rd-msg"></p>
@@ -1086,7 +1087,29 @@
   function ytLoad() {
     var vid = ytIdOf($('yt-url').value);
     if (!vid) { alert('YouTube の動画のアドレスを入れてください（https://www.youtube.com/watch?v=… や https://youtu.be/…）。'); return; }
-    var cues = parseCues($('yt-in').value);
+    var raw = $('yt-in').value.replace(/^\s+|\s+$/g, '');
+    if (!raw) { ytAuto(vid); return; }
+    ytMake(vid, parseCues(raw));
+  }
+  // Apps Script に頼んで、YouTube から英語の字幕を取ってくる
+  function ytAuto(vid) {
+    if (!gasUrl) { alert('字幕を自動で取るには、先に「⚙ 翻訳の設定」が必要です。設定しない場合は、字幕を貼り付けてください。'); return; }
+    $('yt-go').disabled = true; $('yt-msg').textContent = '字幕を取ってきています…';
+    gasCall({ yt: vid }, function (data, err) {
+      $('yt-go').disabled = false;
+      if (data && data.ok && data.cues && data.cues.length) {
+        var lines = []; each(data.cues, function (c) { lines.push(fmtSec(c[0]) + (c[0] % 1 ? '.' + Math.round((c[0] % 1) * 10) : '') + '\n' + c[1]); });
+        $('yt-msg').textContent = data.auto ? '自動字幕を取ってきました（句読点がないので、YouTube の区切りのままです）。' : '字幕を取ってきました。';
+        ytMake(vid, parseCues(lines.join('\n')));
+        return;
+      }
+      var e = String((data && data.error) || err || '');
+      var msg = data && data.ok && !data.cues ? 'Apps Script が古いコードのままです（「⚙ 翻訳の設定」のコードに貼り替えて「新バージョン」でデプロイしてください）。'
+        : /nocaptions/.test(e) ? 'この動画には英語の字幕がないようです。' : '字幕を自動で取れませんでした（' + e.slice(0, 60) + '）。';
+      $('yt-msg').textContent = msg + ' 「文字起こしを表示」の内容を貼り付けて、もう一度押してください。';
+    });
+  }
+  function ytMake(vid, cues) {
     if (!cues.length) { alert('時刻つきの字幕が見つかりませんでした。YouTube の「文字起こしを表示」の内容を、時刻ごとコピーして貼り付けてください。'); return; }
     if (cues.length > 1500) cues = cues.slice(0, 1500);
     var text = cueTexts(cues).join('\n'), ids = rdIds();
@@ -1707,7 +1730,9 @@
     "  var p = e.parameter, out;",
     "  try {",
     "    var sl = p.sl || \"en\", tl = p.tl || \"ja\";",
-    "    if (p.tts) {",
+    "    if (p.yt) {",
+    "      out = ytCaptions(String(p.yt).replace(/[^A-Za-z0-9_-]/g, \"\").slice(0, 11));",
+    "    } else if (p.tts) {",
     "      out = ttsSaved(String(p.tts).slice(0, 1500), String(p.v || \"Kore\").replace(/[^A-Za-z]/g, \"\"), p.pre === \"1\", Number(p.part) || 0);",
     "    } else if (p.qs) {",
     "      var list = JSON.parse(p.qs), ts = [];",
@@ -1742,6 +1767,71 @@
     "  }",
     "  var b64 = Utilities.base64Encode(bytes), PART = 400000, n = Math.ceil(b64.length / PART), k = Math.min(n - 1, part);",
     "  return { ok: true, a: b64.slice(k * PART, (k + 1) * PART), n: n, k: k, saved: saved };",
+    "}",
+    "// YouTube の字幕（英語）を時刻つきで取ってくる。1) 字幕ファイル 2) 文字起こし の順に試す",
+    "function ytCaptions(id) {",
+    "  var html = UrlFetchApp.fetch(\"https://www.youtube.com/watch?v=\" + id + \"&hl=en\", { muteHttpExceptions: true, headers: { \"Accept-Language\": \"en-US,en;q=0.9\" } }).getContentText();",
+    "  var err = \"\";",
+    "  var tracks = jsonAfter(html, '\"captionTracks\":');",
+    "  if (tracks && tracks.length) {",
+    "    var pick = null, i;",
+    "    for (i = 0; i < tracks.length && !pick; i++) if (/^en/.test(tracks[i].languageCode) && tracks[i].kind !== \"asr\") pick = tracks[i];",
+    "    for (i = 0; i < tracks.length && !pick; i++) if (/^en/.test(tracks[i].languageCode)) pick = tracks[i];",
+    "    if (!pick) pick = tracks[0];",
+    "    try {",
+    "      var r = UrlFetchApp.fetch(pick.baseUrl.replace(/\\\\u0026/g, \"&\") + \"&fmt=json3\", { muteHttpExceptions: true });",
+    "      var txt = r.getContentText();",
+    "      if (r.getResponseCode() === 200 && txt) {",
+    "        var j = JSON.parse(txt), cues = [];",
+    "        (j.events || []).forEach(function (ev) {",
+    "          if (!ev.segs) return;",
+    "          var t = ev.segs.map(function (x) { return x.utf8 || \"\"; }).join(\"\").replace(/\\s+/g, \" \").trim();",
+    "          if (t) cues.push([Math.round((ev.tStartMs || 0) / 100) / 10, t]);",
+    "        });",
+    "        if (cues.length) return { ok: true, cues: cues, lang: pick.languageCode, auto: pick.kind === \"asr\" };",
+    "      }",
+    "      err = \"timedtext \" + r.getResponseCode();",
+    "    } catch (e) { err = String(e); }",
+    "  } else err = /consent|recaptcha|confirm you/i.test(html) ? \"blocked\" : \"nocaptions\";",
+    "  try {",
+    "    var pm = /\"getTranscriptEndpoint\":\\{\"params\":\"([^\"]+)\"/.exec(html), km = /\"INNERTUBE_API_KEY\":\"([^\"]+)\"/.exec(html), vm = /\"INNERTUBE_CLIENT_VERSION\":\"([^\"]+)\"/.exec(html);",
+    "    if (pm && km) {",
+    "      var res = UrlFetchApp.fetch(\"https://www.youtube.com/youtubei/v1/get_transcript?key=\" + km[1], {",
+    "        method: \"post\", contentType: \"application/json\", muteHttpExceptions: true,",
+    "        payload: JSON.stringify({ context: { client: { clientName: \"WEB\", clientVersion: vm ? vm[1] : \"2.20251001.00.00\", hl: \"en\" } }, params: pm[1] })",
+    "      });",
+    "      if (res.getResponseCode() === 200) {",
+    "        var cues2 = [];",
+    "        var walk = function (o) {",
+    "          if (!o || typeof o !== \"object\") return;",
+    "          if (o.transcriptSegmentRenderer) {",
+    "            var g = o.transcriptSegmentRenderer, t2 = ((g.snippet && g.snippet.runs) || []).map(function (x) { return x.text; }).join(\"\").replace(/\\s+/g, \" \").trim();",
+    "            if (t2) cues2.push([Math.round(Number(g.startMs || 0) / 100) / 10, t2]);",
+    "            return;",
+    "          }",
+    "          for (var k in o) walk(o[k]);",
+    "        };",
+    "        walk(JSON.parse(res.getContentText()));",
+    "        if (cues2.length) return { ok: true, cues: cues2, via: \"transcript\" };",
+    "      }",
+    "      err += \" / transcript \" + res.getResponseCode();",
+    "    }",
+    "  } catch (e2) { err += \" / \" + e2; }",
+    "  return { ok: false, error: err || \"nocaptions\" };",
+    "}",
+    "// 文字列の中の  \"名前\":[ ... ]  の [ ... ] を取り出して読む（中の文字列や入れ子も考える）",
+    "function jsonAfter(s, key) {",
+    "  var i = s.indexOf(key); if (i < 0) return null;",
+    "  i += key.length; var open = s.charAt(i); if (open !== \"[\" && open !== \"{\") return null;",
+    "  var close = open === \"[\" ? \"]\" : \"}\", depth = 0, inStr = false;",
+    "  for (var j = i; j < s.length; j++) {",
+    "    var c = s.charAt(j);",
+    "    if (inStr) { if (c === \"\\\\\") j++; else if (c === '\"') inStr = false; continue; }",
+    "    if (c === '\"') inStr = true;",
+    "    else if (c === \"[\" || c === \"{\") depth++;",
+    "    else if (c === \"]\" || c === \"}\") { depth--; if (depth === 0) { try { return JSON.parse(s.slice(i, j + 1)); } catch (e) { return null; } } }",
+    "  }",
+    "  return null;",
     "}",
     "function voiceFolder() {",
     "  var props = PropertiesService.getScriptProperties(), id = props.getProperty(\"VOICE_FOLDER\");",
