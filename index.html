@@ -950,6 +950,18 @@
   /* ---- 🎬 YouTube の動画で読む ---- */
   var ytPlayer = null, ytReady = false, ytWait = [], ytTimer = null, ytLoop = false, ytLoopIdx = -1, ytVid = '';
   function fmtSec(t) { t = Math.floor(t || 0); var h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, x = t % 60; return (h ? h + ':' + pad2(m) : m) + ':' + pad2(x); }
+  // YouTube の文字起こしをコピーすると付いてくる読み上げ用の時間（「1 分 28 秒」「28 seconds」など）を消す
+  function stripDur(t) {
+    return String(t || '').replace(/^\s*(\d*\s*(時間|分|秒)\s*)+/, '')
+      .replace(/^\s*(\d+\s*(hours?|minutes?|seconds?)\s*,?\s*)+$/i, '').replace(/^\s+/, '');
+  }
+  // 前に読み込んだ字幕も直す（直したら訳を作り直す）
+  function fixCues(d) {
+    var changed = false;
+    each(d.cues, function (c) { var t = stripDur(c[1]); if (t !== c[1]) { c[1] = t; changed = true; } });
+    if (changed) { d.text = cueTexts(d.cues).join('\n'); d.title = '🎬 ' + (d.cues[0] ? d.cues[0][1].slice(0, 56) : ''); delete d.tr; rdSaveLocal(); }
+    return changed;
+  }
   function cueTexts(cues) { var a = []; each(cues, function (c) { a.push(c[1]); }); return a; }
   function ytIdOf(u) {
     u = String(u || '').replace(/^\s+|\s+$/g, '');
@@ -967,12 +979,14 @@
       var m = TS.exec(l);
       if (m) {
         var sec = (m[1] ? Number(m[1]) * 3600 : 0) + Number(m[2]) * 60 + Number(m[3]) + (m[4] ? Number('0.' + m[4]) : 0);
-        var rest = l.replace(/^\s*[\d:.,]+(\s*-->\s*[\d:.,]+[^\n]*)?/, '').replace(/^\s+/, '');
+        var rest = l.slice(m[0].length).replace(/^\s*-->\s*[\d:.,]+[^\n]*/, '');
+        rest = stripDur(rest);
         if (l.indexOf('-->') >= 0) rest = '';
         cur = { t: sec, s: rest }; cues.push(cur);
         continue;
       }
-      if (cur) cur.s += (cur.s ? ' ' : '') + l;
+      l = stripDur(l);
+      if (cur && l) cur.s += (cur.s ? ' ' : '') + l;
     }
     var out = [];
     each(cues, function (c) {
@@ -1315,6 +1329,7 @@
     rdCur = { id: id, d: d };
     $('btn-rd-back').className = '';
     $('rd-input').className = 'hidden'; $('rd-view').className = '';
+    if (d.cues && fixCues(d)) isNew = true;
     var list = d.cues ? cueTexts(d.cues) : splitSentences(d.text);
     rdSents = [];
     each(list, function (t) { rdSents.push({ text: t, toks: tokenize(t), idioms: [] }); });
