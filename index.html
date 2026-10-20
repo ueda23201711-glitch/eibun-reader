@@ -2843,18 +2843,34 @@
   }
   window.addEventListener('hashchange', function () { if (/[#&]ru=/.test(location.hash)) { sharePend = readSharePend(); openSharePend(); } });
   // 単語帳から：#src=英文ID.文の番号（新しく保存した単語）／#find=例文（前に保存した単語）
-  function readJump() {
-    var h = location.hash, a = /[#&]src=([A-Za-z0-9_-]+)\.(\d+)/.exec(h), f = /[#&]find=([^&]*)/.exec(h);
+  function parseJump(h) {
+    var a = /[#&]src=([A-Za-z0-9_-]+)\.(\d+)/.exec(h), f = /[#&]find=([^&]*)/.exec(h);
     if (!a && !f) return null;
-    if (/^#ru=/.test(h)) return null;   // 共有で送られてきたアドレスの中の文字に反応しない
-    // My単語帳から来たときの通行証（暗証番号ロックを聞き直さない）。アドレスを消す前に渡しておく
+    // My単語帳から来たときの通行証（暗証番号ロックを聞き直さない）
     var ok = /[#&]ok=([0-9]+\.[0-9a-f]+)/.exec(h);
     if (ok) { if (window.PinLock && window.PinLock.pass) window.PinLock.pass(ok[1]); else window.__pinPass = ok[1]; }
-    try { window.history.replaceState(null, '', location.href.split('#')[0]); } catch (e) {}
     var t = ''; try { t = f ? decodeURIComponent(f[1]) : ''; } catch (e) {}
     return a ? { id: a[1], n: Number(a[2]) } : { find: t };
   }
-  var jumpPend = readJump();
+  function readJump() {
+    var h = location.hash;
+    if (/^#ru=/.test(h)) return null;   // 共有で送られてきたアドレスの中の文字に反応しない
+    var j = parseJump(h);
+    if (!j) return null;
+    lsDel('eibun_jump');   // 置き手紙と二重にならないように
+    try { window.history.replaceState(null, '', location.href.split('#')[0]); } catch (e) {}
+    return j;
+  }
+  // My単語帳が残した置き手紙（eibun_jump）。アドレスの #… が届かず、開いていた英文リーダーが
+  // 前の画面のまま前に出てくるだけの端末（ホーム画面アプリどうし）でも、元の英文を開けるようにする
+  function readStoredJump() {
+    var v = null; try { v = JSON.parse(lsGet('eibun_jump') || 'null'); } catch (e) {}
+    if (!v || !v.h) return null;
+    lsDel('eibun_jump');
+    if (Math.abs(now() - Number(v.t || 0)) > 90000) return null;
+    return parseJump(String(v.h));
+  }
+  var jumpPend = readJump() || readStoredJump();
   // その英文を開いて、その文を光らせる
   function rdShowAt(id, n) {
     openRdDoc(id);
@@ -2891,6 +2907,10 @@
     api('GET', '/reader', undefined, function (err, data) { if (!err && data) { for (var x in data) rdDocs[x] = data[x]; rdSaveLocal(); } rdJump(j, true); });
   }
   window.addEventListener('hashchange', function () { var j = readJump(); if (j) rdJump(j); });
+  function checkStoredJump() { if (!KEY) return; var j = readStoredJump(); if (j) rdJump(j); }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) checkStoredJump(); });
+  window.addEventListener('pageshow', checkStoredJump);
+  window.addEventListener('focus', checkStoredJump);
   function openWebPend() { if (!webPend || !KEY) return; var w = webPend; webPend = null; openReader(''); rdAddDoc(w.text, w.title, w.src); }
   // すでに開いているときに送られてきた場合
   window.addEventListener('hashchange', function () { if (/[#&]rt=/.test(location.hash)) { webPend = readWebPend(); openWebPend(); } });
