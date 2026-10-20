@@ -2847,6 +2847,9 @@
     var h = location.hash, a = /[#&]src=([A-Za-z0-9_-]+)\.(\d+)/.exec(h), f = /[#&]find=([^&]*)/.exec(h);
     if (!a && !f) return null;
     if (/^#ru=/.test(h)) return null;   // 共有で送られてきたアドレスの中の文字に反応しない
+    // My単語帳から来たときの通行証（暗証番号ロックを聞き直さない）。アドレスを消す前に渡しておく
+    var ok = /[#&]ok=([0-9]+\.[0-9a-f]+)/.exec(h);
+    if (ok) { if (window.PinLock && window.PinLock.pass) window.PinLock.pass(ok[1]); else window.__pinPass = ok[1]; }
     try { window.history.replaceState(null, '', location.href.split('#')[0]); } catch (e) {}
     var t = ''; try { t = f ? decodeURIComponent(f[1]) : ''; } catch (e) {}
     return a ? { id: a[1], n: Number(a[2]) } : { find: t };
