@@ -301,10 +301,44 @@
 </div>
 
 <!-- 英文リーダー -->
+<!-- 共有クリップ -->
+<div id="scr-clip" class="screen hidden">
+  <div class="bar">
+    <button id="btn-clip-back" type="button">← 戻る</button>
+    <h1 style="margin-left:10px">共有クリップ</h1>
+    <span id="clip-live" class="live">○ 接続中…</span>
+  </div>
+  <div class="body">
+    <div class="clip-wrap">
+      <div class="clip-send">
+        <textarea id="clip-in" placeholder="ほかの端末に送りたい文字や URL を入力（または貼り付け）"></textarea>
+        <div class="row">
+          <button id="clip-send" class="primary" type="button">送る</button>
+          <button id="clip-paste" class="hidden" type="button">📋 コピーした文字を貼り付け</button>
+          <span id="clip-msg" class="note"></span>
+        </div>
+      </div>
+      <div id="clip-list"></div>
+      <div class="empty hidden" id="clip-empty">まだ何もありません。<br>ほかの端末でこの画面を開いて文字や URL を送ると、ここにすぐ表示されます。</div>
+    </div>
+  </div>
+</div>
+<div id="read-view" class="hidden">
+  <div class="read-bar">
+    <button id="read-close" type="button">← 閉じる</button>
+    <span id="read-meta"></span>
+    <span class="read-right">
+      <button id="read-small" type="button">A−</button><button id="read-big" type="button">A＋</button><button id="read-copy" type="button">コピー</button>
+    </span>
+  </div>
+  <div id="read-text"></div>
+</div>
+
 <div id="scr-reader" class="screen hidden">
   <div class="bar">
     <button id="btn-rd-back" class="hidden" type="button">← 戻る</button>
     <h1 style="margin-left:10px">英文リーダー</h1>
+    <button id="btn-clip" type="button" title="共有クリップ" style="margin-right:6px">📋<span class="wide"> クリップ</span></button>
     <button id="btn-files" type="button" title="ファイル共有" style="margin-right:6px">📎<span class="wide"> ファイル</span></button>
     <button id="btn-rd-set" type="button" title="翻訳の設定">⚙︎<span class="wide"> 翻訳の設定</span></button>
   </div>
@@ -554,7 +588,7 @@
     return s;
   }
   function show(id) {
-    each(['scr-setup', 'scr-reader'], function (s) {
+    each(['scr-setup', 'scr-reader', 'scr-clip'], function (s) {
       $(s).className = 'screen' + (s === id ? '' : ' hidden');
     });
   }
@@ -645,6 +679,174 @@
       return !!ok;
     } catch (e) { return false; }
   }
+  /* ===================== 共有クリップ（端末どうしで文字・URL を受け渡す） ===================== */
+  // memos/合言葉/clips/ID = {t: 文字, at: 時刻, d: 送った端末}
+  var CLIP_MAX = 100;
+  var clips = lsJSON('eibun_clips', {});
+  var clipES = null, clipPoll = null, clipOpen = false, readingId = null, readSize = Number(lsGet('eibun_read_size') || 22);
+  function deviceName() {
+    var u = navigator.userAgent;
+    if (/iPad/.test(u) || (/Macintosh/.test(u) && navigator.maxTouchPoints > 1)) return 'iPad';
+    if (/iPhone/.test(u)) return 'iPhone';
+    if (/Android/.test(u)) return 'Android';
+    return 'パソコン';
+  }
+  function saveClips() { lsSet('eibun_clips', JSON.stringify(clips)); }
+  function clipIds() {
+    var a = []; for (var k in clips) if (clips[k] && typeof clips[k].t === 'string') a.push(k);
+    a.sort(function (x, y) { return (clips[y].at || 0) - (clips[x].at || 0); });
+    return a;
+  }
+  var URL_RE = /(https?:\/\/[^\s<>"'「」（）]+)/g;
+  // 文字を安全に入れつつ、URL はリンクにする
+  function fillLinked(el, text) {
+    el.innerHTML = '';
+    var last = 0, m;
+    URL_RE.lastIndex = 0;
+    while ((m = URL_RE.exec(text))) {
+      if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+      var a = document.createElement('a'); a.href = m[1]; a.target = '_blank'; a.rel = 'noopener'; a.textContent = m[1];
+      el.appendChild(a);
+      last = m.index + m[1].length;
+    }
+    if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
+  }
+  function firstUrl(text) { URL_RE.lastIndex = 0; var m = URL_RE.exec(text); return m ? m[1] : null; }
+  function renderClips() {
+    var box = $('clip-list'); box.innerHTML = '';
+    var ids = clipIds();
+    $('clip-empty').className = 'empty' + (ids.length ? ' hidden' : '');
+    each(ids, function (id) {
+      var c = clips[id];
+      var row = document.createElement('div'); row.className = 'clip';
+      var head = document.createElement('div'); head.className = 'clip-head';
+      head.textContent = fmtClipTime(c.at) + (c.d ? '・' + c.d + 'から' : '');
+      var body = document.createElement('div'); body.className = 'clip-body';
+      fillLinked(body, c.t.length > 600 ? c.t.slice(0, 600) + '…' : c.t);
+      var btns = document.createElement('div'); btns.className = 'clip-btns';
+      var mk = function (label, fn, cls) { var b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (cls) b.className = cls; on(b, 'click', function (e) { e.stopPropagation(); fn(); }); btns.appendChild(b); };
+      mk('大きく読む', function () { openReading(id); });
+      if (/[A-Za-z]{3,}\s+[A-Za-z]{2,}/.test(c.t)) mk('📖 リーダー', function () { clipOpen = false; stopClipSync(); openReader(c.t); });
+      mk('コピー', function () { clipCopy(c.t); });
+      var u = firstUrl(c.t);
+      if (u) mk('開く', function () { window.open(u, '_blank'); });
+      mk('削除', function () { delClip(id); }, 'danger');
+      row.appendChild(head); row.appendChild(body); row.appendChild(btns);
+      on(body, 'click', function (e) { if (e.target.tagName !== 'A') openReading(id); });
+      box.appendChild(row);
+    });
+  }
+  function clipCopy(t) {
+    var done = function (ok) { $('clip-msg').textContent = ok ? 'コピーしました。' : 'この端末では自動でコピーできません。「大きく読む」で文字を長押ししてコピーしてください。'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(function () { done(true); }, function () { done(fallbackCopy(t)); }); return; }
+    done(fallbackCopy(t));
+  }
+  function sendClip(text) {
+    text = String(text || '').replace(/^\s+|\s+$/g, '');
+    if (!text) return;
+    if (text.length > 50000) text = text.slice(0, 50000);
+    if (!KEY) return;
+    $('clip-msg').textContent = '送信中…';
+    rawApi('POST', '/memos/' + KEY + '/clips', { t: text, at: { '.sv': 'timestamp' }, d: deviceName() }, function (err, res) {
+      if (err) { $('clip-msg').textContent = '送れませんでした（' + errText(err) + '）。通信状態を確認してください。'; return; }
+      $('clip-msg').textContent = '送りました。';
+      $('clip-in').value = '';
+      if (res && res.name && !clips[res.name]) { clips[res.name] = { t: text, at: now(), d: deviceName() }; saveClips(); renderClips(); }
+      pruneClips();
+    });
+  }
+  function pruneClips() {
+    var ids = clipIds();
+    if (ids.length <= CLIP_MAX) return;
+    var b = {};
+    for (var i = CLIP_MAX; i < ids.length; i++) { b['clips/' + ids[i]] = null; delete clips[ids[i]]; }
+    saveClips();
+    api('PATCH', '', b, function () {});
+  }
+  function delClip(id) {
+    delete clips[id]; saveClips(); renderClips();
+    if (readingId === id) closeReading();
+    var b = {}; b['clips/' + id] = null;
+    api('PATCH', '', b, function () {});
+  }
+  // 新しく届いたものを受け取る（Firebase のストリーム。だめなら定期的に読み込む）
+  function applyClipEvent(path, data) {
+    if (path === '/') { clips = data || {}; }
+    else {
+      var parts = path.replace(/^\//, '').split('/');
+      if (parts.length === 1) { if (data === null) delete clips[parts[0]]; else clips[parts[0]] = data; }
+      else if (clips[parts[0]]) { if (data === null) delete clips[parts[0]][parts[1]]; else clips[parts[0]][parts[1]] = data; }
+    }
+    saveClips();
+    if (clipOpen) renderClips();
+    if (readingId && !clips[readingId]) closeReading();
+  }
+  function startClipSync() {
+    stopClipSync();
+    if (!KEY) return;
+    var url = DB_URL + '/memos/' + KEY + '/clips.json';
+    if (window.EventSource) {
+      try {
+        clipES = new EventSource(url);
+        var h = function (e) { try { var m = JSON.parse(e.data); applyClipEvent(m.path, m.data); $('clip-live').textContent = '● 受信中'; $('clip-live').className = 'live on'; } catch (er) {} };
+        clipES.addEventListener('put', h);
+        clipES.addEventListener('patch', function (e) {
+          try { var m = JSON.parse(e.data); for (var k in m.data) applyClipEvent((m.path === '/' ? '' : m.path) + '/' + k, m.data[k]); } catch (er) {}
+        });
+        clipES.onerror = function () { $('clip-live').textContent = '○ 再接続中…'; $('clip-live').className = 'live'; };
+        return;
+      } catch (e) { clipES = null; }
+    }
+    var pull = function () {
+      rawApi('GET', '/memos/' + KEY + '/clips', undefined, function (err, data) {
+        if (err) { $('clip-live').textContent = '○ オフライン'; $('clip-live').className = 'live'; return; }
+        applyClipEvent('/', data); $('clip-live').textContent = '● 受信中'; $('clip-live').className = 'live on';
+      });
+    };
+    pull(); clipPoll = setInterval(pull, 8000);
+  }
+  function stopClipSync() {
+    if (clipES) { try { clipES.close(); } catch (e) {} clipES = null; }
+    if (clipPoll) { clearInterval(clipPoll); clipPoll = null; }
+  }
+  function openClip() {
+    if (!KEY) return;
+    clipOpen = true; $('clip-msg').textContent = '';
+    show('scr-clip'); renderClips(); startClipSync();
+    $('clip-paste').className = (navigator.clipboard && navigator.clipboard.readText) ? '' : 'hidden';
+  }
+  function closeClip() { clipOpen = false; stopClipSync(); closeReading(); show('scr-reader'); }
+  // 大きく読む
+  function openReading(id) {
+    var c = clips[id]; if (!c) return;
+    readingId = id;
+    fillLinked($('read-text'), c.t);
+    $('read-text').style.fontSize = readSize + 'px';
+    $('read-meta').textContent = fmtClipTime(c.at) + (c.d ? '・' + c.d + 'から' : '');
+    $('read-view').className = '';
+    $('read-text').scrollTop = 0;
+  }
+  function closeReading() { readingId = null; $('read-view').className = 'hidden'; }
+  function setReadSize(d) {
+    readSize = Math.max(14, Math.min(48, readSize + d)); lsSet('eibun_read_size', String(readSize));
+    $('read-text').style.fontSize = readSize + 'px';
+  }
+  on($('btn-clip'), 'click', openClip);
+  on($('btn-clip-back'), 'click', closeClip);
+  on($('clip-send'), 'click', function () { sendClip($('clip-in').value); });
+  on($('clip-paste'), 'click', function () {
+    navigator.clipboard.readText().then(function (t) {
+      if (!t) { $('clip-msg').textContent = 'コピーした文字がありません。'; return; }
+      $('clip-in').value = t;
+      $('clip-msg').textContent = '貼り付けました。「送る」を押すとほかの端末に届きます。';
+    }, function () { $('clip-msg').textContent = '貼り付けできませんでした。入力欄を長押しして「ペースト」を選んでください。'; });
+  });
+  on($('read-close'), 'click', closeReading);
+  on($('read-copy'), 'click', function () { if (readingId && clips[readingId]) clipCopy(clips[readingId].t); });
+  on($('read-small'), 'click', function () { setReadSize(-2); });
+  on($('read-big'), 'click', function () { setReadSize(2); });
+  on(document, 'visibilitychange', function () { if (!clipOpen) return; if (document.hidden) stopClipSync(); else startClipSync(); });
+
   /* ===================== 英文リーダー ===================== */
   // 保存先：memos/合言葉/reader/ID = {title, text, tr: [文ごとの訳], at}
   //        memos/合言葉/settings/gas = 翻訳（Google Apps Script）のアドレス
