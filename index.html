@@ -418,6 +418,7 @@
             <button id="yt-safari-btn" class="primary" type="button" style="margin-top:8px">▶ YouTube で最初から見る</button></div></div>
         <button id="rd-play" class="primary" type="button">▶ 再生</button>
         <button id="yt-loop" class="hidden" type="button" title="今のセリフをくり返し再生">🔂 1文くり返し：オフ</button>
+        <button id="rd-ep" class="hidden" type="button" title="字幕プレイヤーで、画面いっぱいに大きな英日字幕で見る（今の場面から）">🎬 字幕プレイヤーで見る</button>
         <button id="rd-ab" type="button" title="1回目に押した文（A）から2回目に押した文（B）までをくり返す">🅰🅱 A-B リピート</button>
         <button id="lv-save" class="hidden" type="button" title="ドライブの動画をこの端末に取り込んで、次からすぐ見られるようにする">⬇ この端末に取り込む</button>
         <button id="rd-cont" type="button" title="🔊 で読んだあと、次の文も続けて読む">🔁 続けて：オフ</button>
@@ -2409,6 +2410,7 @@
     var hide = ['rd-flowbtn', 'rd-cont', 'rd-voice', 'rd-make'];
     each(hide, function (id) { var e = $(id); if (e) e.style.display = v ? 'none' : ''; });
     $('yt-loop').className = v ? '' : 'hidden';
+    $('rd-ep').className = v && !lvOld ? '' : 'hidden';
     var hp = $('rd-hint-p');
     if (!hp.getAttribute('data-n')) hp.setAttribute('data-n', hp.innerHTML);
     hp.innerHTML = v ? 'セリフの ▶ でその場面から再生。単語をタップすると動画が止まって意味が出ます（<span class="idm-sample">下線</span>は熟語）。「🔂 1文くり返し」で今のセリフをくり返します。' : hp.getAttribute('data-n');
@@ -2460,6 +2462,31 @@
   function ytToggle() {
     if (!ytPlayer || !ytReady) return;
     if (ytState() === 1) ytPlayer.pauseVideo(); else ytPlayer.playVideo();
+  }
+  // 字幕プレイヤーへ（今の場面から）。字幕プレイヤーの「📖 リーダー」で、ここへ戻ってこられる
+  var EP_URL = location.protocol + '//' + location.host + '/eibun-player/';
+  on($('rd-ep'), 'click', function () {
+    if (!rdCur || !rdCur.d.cues) return;
+    var t = 0; try { t = ytPlayer && ytReady ? ytPlayer.getCurrentTime() || 0 : 0; } catch (e) {}
+    if (!t && rdIdx >= 0 && rdCur.d.cues[rdIdx]) t = rdCur.d.cues[rdIdx][0];
+    var url = EP_URL + '#d=' + rdCur.id + '&t=' + Math.floor(t);
+    var tk = window.PinLock && window.PinLock.ticket ? window.PinLock.ticket() : '';
+    if (tk) url += '&ok=' + tk;
+    // 置き手紙：字幕プレイヤーが前の画面のまま前に出てくるだけの端末でも、これを見てこの動画を開く
+    lsSet('ep_jump', JSON.stringify({ h: url.slice(url.indexOf('#')), t: now() }));
+    try { if (ytPlayer && ytReady) ytPlayer.pauseVideo(); } catch (e) {}
+    window.open(url, '_blank');
+  });
+  // 字幕プレイヤーから戻ってきたとき：動画の準備ができたら、その場面に合わせる（自動では再生しない）
+  function rdSeekWhenReady(id, t) {
+    var tries = 0;
+    var go = function () {
+      if (!rdCur || rdCur.id !== id || ++tries > 60) return;
+      var lvv = $('lv-video'), ready = ytPlayer && ytReady && (!rdCur.d.lv || (lvv && lvv.readyState >= 1));
+      if (!ready) { setTimeout(go, 300); return; }
+      try { ytPlayer.seekTo(t, true); } catch (e) {}
+    };
+    setTimeout(go, 300);
   }
   function ytSeek(si) {
     if (!ytOn()) return;
@@ -4592,7 +4619,8 @@
     var ok = /[#&]ok=([0-9]+\.[0-9a-f]+)/.exec(h);
     if (ok) { if (window.PinLock && window.PinLock.pass) window.PinLock.pass(ok[1]); else window.__pinPass = ok[1]; }
     var t = ''; try { t = f ? decodeURIComponent(f[1]) : ''; } catch (e) {}
-    return a ? { id: a[1], n: Number(a[2]) } : { find: t };
+    var tm = /[#&]t=(\d+(?:\.\d+)?)/.exec(h);   // 字幕プレイヤーから：動画の場面（秒）
+    return a ? { id: a[1], n: Number(a[2]), t: tm ? Number(tm[1]) : -1 } : { find: t };
   }
   function readJump() {
     var h = location.hash;
@@ -4614,8 +4642,9 @@
   }
   var jumpPend = readJump() || readStoredJump();
   // その英文を開いて、その文を光らせる
-  function rdShowAt(id, n) {
+  function rdShowAt(id, n, t) {
     openRdDoc(id);
+    if (t >= 0 && rdDocs[id] && rdDocs[id].cues) rdSeekWhenReady(id, t);
     if (n >= 0 && n < rdSents.length) {
       markSentence(n);
       setTimeout(function () { var el = $('rd-text').childNodes[n]; if (el && el.scrollIntoView) { try { el.scrollIntoView(true); $('rd-body').scrollTop -= 120; } catch (e) {} } }, 200);
@@ -4626,9 +4655,9 @@
     openReader('');
     var miss = function () { $('rd-msg').textContent = '元の英文が見つかりませんでした（英文リーダーの「これまでの英文」から消えたのかもしれません）。'; };
     if (j.id) {
-      if (rdDocs[j.id]) { rdShowAt(j.id, j.n); return; }
+      if (rdDocs[j.id]) { rdShowAt(j.id, j.n, j.t); return; }
       api('GET', '/reader/' + j.id, undefined, function (err, d) {
-        if (!err && d && d.text) { rdDocs[j.id] = d; rdSaveLocal(); rdShowAt(j.id, j.n); } else miss();
+        if (!err && d && d.text) { rdDocs[j.id] = d; rdSaveLocal(); rdShowAt(j.id, j.n, j.t); } else miss();
       });
       return;
     }
