@@ -141,7 +141,7 @@
     document.getElementById('pl-cancel').style.display = m === 'unlock' ? 'none' : '';
     ov.style.display = 'block'; dots(); bioButton();
   }
-  function hide() { if (ov) ov.style.display = 'none'; mode = null; }
+  function hide() { if (ov) ov.style.display = 'none'; mode = null; try { sessionStorage.setItem('eibun_pin_alive', String(now())); } catch (e) {} }
   function dots() { var s = ''; for (var i = 0; i < buf.length; i++) s += '●'; q('d').textContent = s || ' '; }
   function press(v) {
     if (!mode) return;
@@ -184,6 +184,7 @@
   function startSet() { show('set1', '暗証番号を決めてください', '4〜6桁の数字（英文リーダーと My単語帳 で共通）'); okButton().style.display = 'block'; }
   function lock() {
     if (!saved()) return;
+    try { sessionStorage.setItem('eibun_pin_alive', '0'); } catch (e) {}   // ロック中に別のページへ移っても、聞き直す
     show('unlock', '暗証番号を入力'); var b = document.getElementById('pl-ok'); if (b) b.style.display = 'none';
     // 端末によってはボタンを押さなくても顔認証などが始まる（だめならボタンで）
     setTimeout(function () { bioUnlock(true); }, 300);
@@ -266,10 +267,22 @@
 
   // ページ側がアドレスの #…&ok=通行証 を先に読んで消すことがあるので、window.__pinPass でも受け取る
   function hashPass() { var m = /[#&]ok=([0-9]+\.[0-9a-f]+)/.exec(location.hash); return m ? m[1] : ''; }
+  /* ---- 同じ画面（タブ・ホーム画面アプリ）の中での移動：英文リーダー ⇔ 字幕プレイヤー（player.html）など
+     開いている間はときどき「いま使っている」を sessionStorage に書く。ページを移ってもそれが新しければ聞き直さない
+     （sessionStorage はその画面の中だけのもの。アプリを閉じたり、10分以上たったりしたら、今までどおり聞く） ---- */
+  var ALIVE = 'eibun_pin_alive';
+  function ssGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+  function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
+  function alive() { if (mode !== 'unlock') ssSet(ALIVE, String(now())); }
+  function stillAlive() { var t = Number(ssGet(ALIVE) || 0); return t > 0 && now() - t < AWAY_MS; }
+  setInterval(alive, 15000);
+  window.addEventListener('pagehide', alive);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) alive(); });
   function init() {
     addButton();
     var tk = window.__pinPass || hashPass(); window.__pinPass = '';
-    if (saved() && !(tk && usePass(tk))) lock();
+    if (saved() && !(tk && usePass(tk)) && !stillAlive()) lock();
+    alive();
   }
   if (document.body) init(); else document.addEventListener('DOMContentLoaded', init);
   window.PinLock = { lock: lock, setup: startSet, menu: menu, ticket: ticket, pass: usePass };
