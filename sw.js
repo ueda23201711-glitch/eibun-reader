@@ -1,6 +1,6 @@
 // 英文リーダー用 Service Worker（iOS 9 では使われない。新しい端末でのオフライン起動用）
-const CACHE = "eibun-reader-v94";
-const ASSETS = ["./", "./index.html", "./lock.js", "./fileshare.js", "./app-v2.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon-180.png", "./icons/favicon-32.png", "./vendor/ejdict/phrases.json", "./vendor/qrcode.js", "./vendor/jsQR.js"];
+const CACHE = "eibun-reader-v95";
+const ASSETS = ["./", "./index.html", "./player.html", "./lock.js", "./fileshare.js", "./app-v2.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon-180.png", "./icons/favicon-32.png", "./vendor/ejdict/phrases.json", "./vendor/qrcode.js", "./vendor/jsQR.js"];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -19,10 +19,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;   // Firebase・翻訳には関与しない
   if (req.mode === "navigate") {
+    const page = /\/player\.html$/.test(url.pathname) ? "./player.html" : "./index.html";   // 字幕プレイヤー（player.html）は別に置く
     event.respondWith(
       fetch(req)
-        .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put("./index.html", copy)); return res; })
-        .catch(() => caches.match("./index.html"))
+        .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(page, copy)); return res; })
+        .catch(() => caches.match(page).then((c) => c || caches.match("./index.html")))
     );
     return;
   }
