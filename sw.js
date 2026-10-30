@@ -1,5 +1,7 @@
 // 英文リーダー用 Service Worker（iOS 9 では使われない。新しい端末でのオフライン起動用）
-const CACHE = "eibun-reader-v107";
+// ドライブ動画の中継（字幕プレイヤー player.html 用。./__drive__?... を受け持つ）。先に読み込むので、こちらが先に応答する
+importScripts("./drive-sw.js");
+const CACHE = "eibun-reader-v108";
 const ASSETS = ["./", "./index.html", "./player.html", "./lock.js", "./fileshare.js", "./app-v2.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon-180.png", "./icons/favicon-32.png", "./vendor/ejdict/phrases.json", "./vendor/qrcode.js", "./vendor/jsQR.js"];
 
 self.addEventListener("install", (event) => {
@@ -18,6 +20,7 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;   // Firebase・翻訳には関与しない
+  if (/\/__drive__$/.test(url.pathname)) return;   // 中継（drive-sw.js）が受け持つ
   if (req.mode === "navigate") {
     const page = /\/player\.html$/.test(url.pathname) ? "./player.html" : "./index.html";   // 字幕プレイヤー（player.html）は別に置く
     event.respondWith(
