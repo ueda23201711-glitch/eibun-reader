@@ -2536,7 +2536,7 @@
     body.innerHTML = '<p class="note">調べています…（ファイルが多いと少しかかります）</p>';
     gasCall({ f: 'quota' }, function (r, e) {
       if (!r || !r.ok || !r.files) {
-        body.innerHTML = '<p class="note">' + (r && r.ok === false && /act|Unexpected|not found/i.test(String(r.error)) || (r && r.ok && !r.files)
+        body.innerHTML = '<p class="note">' + (r && r.ok === false && /notshared|act|Unexpected|not found/i.test(String(r.error)) || (r && r.ok && !r.files)
           ? 'Apps Script が古いコードのままです。「⚙ 翻訳の設定」のコードに貼り替えて、「新バージョン」でデプロイしてください。'
           : '調べられませんでした（' + dqEsc(String((r && r.error) || e).slice(0, 80)) + '）。') + '</p>';
         return;
