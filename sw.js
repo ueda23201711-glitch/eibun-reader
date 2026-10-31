@@ -1,7 +1,7 @@
 // 英文リーダー用 Service Worker（iOS 9 では使われない。新しい端末でのオフライン起動用）
 // ドライブ動画の中継（字幕プレイヤー player.html 用。./__drive__?... を受け持つ）。先に読み込むので、こちらが先に応答する
 importScripts("./drive-sw.js");
-const CACHE = "eibun-reader-v118";
+const CACHE = "eibun-reader-v119";
 const ASSETS = ["./", "./index.html", "./player.html", "./lock.js", "./fileshare.js", "./app-v2.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon-180.png", "./icons/favicon-32.png", "./vendor/ejdict/phrases.json", "./vendor/qrcode.js", "./vendor/jsQR.js"];
 
 self.addEventListener("install", (event) => {
