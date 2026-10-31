@@ -630,7 +630,13 @@
 <script>
 (function () {
   'use strict';
-  var DB_URL = 'https://kiku990-a838d-default-rtdb.asia-southeast1.firebasedatabase.app';
+  /* Firebase の接続先：この端末で「自分の Firebase」を設定していればそれ（localStorage の fb_db・同じサイトのアプリで共通）、なければ既定 */
+  var DEF_DB = 'https://kiku990-a838d-default-rtdb.asia-southeast1.firebasedatabase.app';
+  function normDb(u) { var m = String(u || '').replace(/^\s+|\s+$/g, '').match(/^(https:\/\/[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:firebasedatabase\.app|firebaseio\.com))(?:\/.*)?$/i); return m ? m[1].toLowerCase() : ''; }
+  function dbFromText(t) { var m = String(t || '').match(/[#&?]db=([^&#]+)/); if (!m) return ''; try { return normDb(decodeURIComponent(m[1])); } catch (e) { return ''; } }
+  function savedDb() { try { return normDb(localStorage.getItem('fb_db')); } catch (e) { return ''; } }
+  function saveDb(u) { try { if (u && u !== DEF_DB) localStorage.setItem('fb_db', u); else localStorage.removeItem('fb_db'); } catch (e) {} }
+  var DB_URL = savedDb() || DEF_DB;
   /* ===================== 小道具 ===================== */
   function $(id) { return document.getElementById(id); }
   function now() { return new Date().getTime(); }
