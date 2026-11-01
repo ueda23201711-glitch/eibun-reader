@@ -582,7 +582,7 @@
     <div class="row"><input type="text" id="ios-sc" placeholder="読み上げ音声" style="max-width:220px"> <button id="ios-sc-save" type="button">名前を保存</button></div>
     <p id="ios-msg" class="note"></p>
     <h3 style="margin-top:18px">合言葉（英文リーダーと My単語帳 専用）</h3>
-    <p class="note" id="key-show"></p>
+    <p class="note"><span id="key-show"></span> <button id="key-reveal" type="button" style="font-size:13px; padding:3px 9px; margin-left:4px;">👁 全部表示</button> <button id="key-copy" type="button" style="font-size:13px; padding:3px 9px; margin-left:4px;">コピー</button></p>
     <p class="note">ほかの端末で使うとき：カメラのある端末（iPhone・Android など）は、その端末の英文リーダーで「QRコードを読み取る」を押してこの QR を読むか、カメラアプリで読み取ってください。</p>
     <div class="qr"><img id="qr-img" alt="合言葉のQRコード"></div>
     <p class="note">この QR は合言葉そのものです。人に見せないでください。<br>カメラが使えない端末（iPad 2/3 など）は、ペアリングコードを表示して、その端末の英文リーダーか My単語帳 に入力してください。</p>
@@ -4726,6 +4726,19 @@
   }
   if ($('ios-sc')) $('ios-sc').value = iosScName();
   on($('ios-sc-save'), 'click', function () { var v = String($('ios-sc').value || '').replace(/^\s+|\s+$/g, '').slice(0, 60); if (v) lsSet(IOS_SC_KEY, v); else lsDel(IOS_SC_KEY); $('ios-sc').value = iosScName(); $('ios-msg').textContent = 'ショートカットの名前を「' + iosScName() + '」にしました。'; });
+  // 合言葉を全部見る（人に見られないところで）・コピーする
+  on($('key-reveal'), 'click', function () {
+    if (!KEY) return;
+    var shown = $('key-reveal').textContent.indexOf('隠す') >= 0;
+    $('key-show').textContent = shown ? '設定済み（' + KEY.slice(0, 4) + '…' + KEY.slice(-4) + '）' : KEY;
+    $('key-reveal').textContent = shown ? '👁 全部表示' : '🙈 隠す';
+  });
+  on($('key-copy'), 'click', function () {
+    if (!KEY) return;
+    var done = function (ok) { $('key-copy').textContent = ok ? 'コピーしました' : 'コピーできませんでした'; setTimeout(function () { $('key-copy').textContent = 'コピー'; }, 2000); };
+    try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(KEY).then(function () { done(true); }, function () { done(false); }); return; } } catch (e) {}
+    try { var ta = document.createElement('textarea'); ta.value = KEY; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.top = '-1000px'; document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, KEY.length); var ok = document.execCommand('copy'); document.body.removeChild(ta); done(ok); } catch (e2) { done(false); }
+  });
   on($('az-test'), 'click', function () { if (!gasUrl) { $('az-msg').textContent = '先に上の翻訳の設定（テストして保存）をしてください。'; return; } gmSample($('az-msg'), 'Ava'); });
   on($('gm-test'), 'click', function () { if (!gasUrl) { $('gm-msg').textContent = '先に上の翻訳の設定（テストして保存）をしてください。'; return; } gmSample($('gm-msg')); });
   on($('fl-small'), 'click', function () { flSize = Math.max(14, flSize - 2); lsSet('eibun_fl_size', String(flSize)); $('fl-text').style.fontSize = flSize + 'px'; });
@@ -5226,6 +5239,7 @@
   on($('btn-rd-set'), 'click', function () {
     $('gas-url').value = gasUrl; $('gas-code').value = GAS_CODE; $('bm-code').value = BM_CODE; $('share-url').value = SHARE_URL; $('gas-msg').textContent = '';
     $('key-show').textContent = KEY ? '設定済み（' + KEY.slice(0, 4) + '…' + KEY.slice(-4) + '）' : '未設定';
+    $('key-reveal').className = KEY ? '' : 'hidden'; $('key-reveal').textContent = '👁 全部表示'; $('key-copy').className = KEY ? '' : 'hidden';
     renderQr();
     $('gas-dlg').className = '';
   });
