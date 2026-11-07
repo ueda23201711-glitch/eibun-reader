@@ -1,0 +1,6 @@
+en-rank.txt: English word-frequency ranking (top 80,000 word forms, most frequent first).
+Generated from wordfreq (https://github.com/rspeer/wordfreq) by Robyn Speer.
+The wordfreq data is licensed under the Creative Commons Attribution-ShareAlike 4.0 license (CC BY-SA 4.0):
+https://creativecommons.org/licenses/by-sa/4.0/
+It combines many sources (Wikipedia, subtitles, news, books, web text, etc.). See the wordfreq README for the full source list.
+This ranking file is distributed under the same CC BY-SA 4.0 license.
