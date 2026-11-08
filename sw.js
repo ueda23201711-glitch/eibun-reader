@@ -3,7 +3,7 @@
 importScripts("./drive-sw.js");
 // この端末に取り込んだ動画を、少しずつ <video> に渡す（./__local__）。メモリの少ない iPhone で落ちないように
 importScripts("./local-sw.js");
-const CACHE = "eibun-reader-v178";
+const CACHE = "eibun-reader-v179";
 const ASSETS = ["./", "./index.html", "./player.html", "./lock.js", "./fileshare.js", "./app-v2.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/apple-touch-icon-180.png", "./icons/favicon-32.png", "./vendor/ejdict/phrases.json", "./vendor/qrcode.js", "./vendor/jsQR.js"];
 
 self.addEventListener("install", (event) => {
@@ -26,7 +26,7 @@ self.addEventListener("fetch", (event) => {
   if (req.mode === "navigate") {
     const page = /\/player\.html$/.test(url.pathname) ? "./player.html" : "./index.html";   // 字幕プレイヤー（player.html）は別に置く
     event.respondWith(
-      fetch(req)
+      fetch(req, { cache: "no-cache" })   // GitHub Pages の10分キャッシュで古い版が出ないように
         .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(page, copy)); return res; })
         .catch(() => caches.match(page).then((c) => c || caches.match("./index.html")))
     );
