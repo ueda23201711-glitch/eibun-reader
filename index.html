@@ -6078,7 +6078,7 @@
 
   // 翻訳の設定
   // Apps Script のコードの版。コードを変えたら必ず上げる（コードの1行目と、アプリの表示に出る）
-  var GAS_VER_LATEST = '2026-11-09d';
+  var GAS_VER_LATEST = '2026-11-09e';
   var GAS_CODE = [
     "// バージョン: " + GAS_VER_LATEST + "（英文リーダー・手書きメモ 共通。アプリの「⚙ 翻訳の設定」に出る最新の版と同じか確かめてください）",
     "var GAS_VER = \"" + GAS_VER_LATEST + "\";",
@@ -6288,6 +6288,15 @@
     "      var df = bkSave(\"doc-\" + ap + \"-\" + di + \".json\", String(b.data || \"\"));",
     "      try { df.setDescription(String(b.desc || \"\").slice(0, 1000)); } catch (e) {}",
     "      out = { ok: true };",
+    "    } else if (b.act === \"vput\") {   // 単語帳の控え（差分）：変わった単語の行だけ受け取り、単語ごとの控え（一度入った単語は消さない）に重ねる",
+    "      var va = String(b.app || \"\"); if (!/^[A-Za-z0-9_-]{8,40}$/.test(va)) throw new Error(\"app\");",
+    "      var vn = \"vocab-\" + va + \".json\", vm = {}; try { vm = JSON.parse(bkRead(vn) || \"{}\") || {}; } catch (e) { vm = {}; }",
+    "      (b.lines || []).slice(0, 5000).forEach(function (x) { if (x && x[0]) vm[String(x[0]).slice(0, 200)] = { l: String(x[1] || \"\").slice(0, 4000), t: Number(x[2]) || Date.now() }; });",
+    "      bkSave(vn, JSON.stringify(vm));",
+    "      out = { ok: true, n: Object.keys(vm).length };",
+    "    } else if (b.act === \"vget\") {",
+    "      var vb = String(b.app || \"\"); if (!/^[A-Za-z0-9_-]{8,40}$/.test(vb)) throw new Error(\"app\");",
+    "      out = { ok: true, data: bkRead(\"vocab-\" + vb + \".json\") || \"{}\" };",
     "    } else if (b.act === \"doclist\") {   // 控え（差分）：自分（このアプリ・この合言葉）の英文の控えの一覧",
     "      var ap2 = String(b.app || \"\"); if (!/^[A-Za-z0-9_-]{8,40}$/.test(ap2)) throw new Error(\"app\");",
     "      var pre = \"doc-\" + ap2 + \"-\";",
