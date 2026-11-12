@@ -3656,7 +3656,14 @@
     var hash = '#d=' + rdCur.id + '&t=' + (Math.round(t * 10) / 10) + (was ? '&p=1' : '') + rdStateHash();
     try { if (ytPlayer && ytReady) ytPlayer.pauseVideo(); } catch (e) {}
     // このアプリの中の字幕プレイヤー（player.html）へ。取り込んだ動画・合言葉がそのまま使える
-    if (true) { var tk0 = window.PinLock && window.PinLock.ticket ? window.PinLock.ticket() : ''; location.href = 'player.html' + hash + (tk0 ? '&ok=' + tk0 : ''); return; }
+    if (true) {
+      var tk0 = window.PinLock && window.PinLock.ticket ? window.PinLock.ticket() : '', go = 'player.html' + hash + (tk0 ? '&ok=' + tk0 : '');
+      // 端末の動画を読み続けていると、ページの切り替えが待たされることがある：先に動画を外してから移る
+      $('rd-status').textContent = '🎬 字幕プレイヤーを開いています…';
+      var lvv = $('lv-video'); if (lvv && lvv.getAttribute('src')) { try { lvv.pause(); lvv.removeAttribute('src'); lvv.load(); } catch (e) {} }
+      setTimeout(function () { location.href = go; }, 30);
+      return;
+    }
     var url = EP_URL + hash;
     var tk = window.PinLock && window.PinLock.ticket ? window.PinLock.ticket() : '';
     if (tk) url += '&ok=' + tk;
